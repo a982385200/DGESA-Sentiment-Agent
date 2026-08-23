@@ -67,7 +67,7 @@ datasets/mini_dataset/vietnamese/train.json  # 100 条
 datasets/mini_dataset/vietnamese/test.json   # 100 条
 ```
 
-数据来源为 UIT-VSFC（Vietnamese Students' Feedback Corpus）。完整实验数据不包含在本仓库中，应按照相应数据集的许可条款单独获取。
+数据来源为 UIT-VSFC（Vietnamese Students' Feedback Corpus）。
 
 ## 配置
 
@@ -137,13 +137,3 @@ src/sentiment_agent/dgesa/         DGESA 核心实现
 tests/                             单元测试与离线集成测试
 ```
 
-## 发布范围
-
-本仓库面向学术审阅和代码参考，包含核心算法与最小示例，但不包含：
-
-- 完整实验数据集
-- 嵌入模型权重
-- 真实实验配置和 API 凭证
-- 论文源文件、图表及完整实验输出
-
-因此，示例可以用于验证代码接口和核心流程，但不能直接复现论文中的完整实验结果。

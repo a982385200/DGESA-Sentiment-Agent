@@ -22,6 +22,8 @@ from sentiment_agent.experiments.artifacts import ArtifactWriter
 from sentiment_agent.experiments.runner import ExperimentRunner
 from sentiment_agent.llm.langchain_qwen import LangChainQwenBackend
 from sentiment_agent.prompts.prediction import PredictionPromptBuilder
+from sentiment_agent.experiments.progress import NullProgressReporter
+from sentiment_agent.reporting.progress import RichProgressReporter
 
 app = typer.Typer(help="Self-evolving multilingual sentiment experiments.")
 experience_app = typer.Typer(help="Inspect and export an experiment experience store.")
@@ -39,7 +41,10 @@ def validate_config(config: Path = typer.Option(..., exists=True, dir_okay=False
 
 
 @app.command()
-def run(config: Path = typer.Option(..., exists=True, dir_okay=False)) -> None:
+def run(
+    config: Path = typer.Option(..., exists=True, dir_okay=False),
+    progress: bool = typer.Option(True, "--progress/--no-progress"),
+) -> None:
     load_dotenv()
     settings = load_config(config)
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + config_hash(settings)[:8]
@@ -74,6 +79,7 @@ def run(config: Path = typer.Option(..., exists=True, dir_okay=False)) -> None:
         prompt_builder=PredictionPromptBuilder(), model_name=settings.model.name,
         retrieval_k=settings.retrieval.k if settings.retrieval.enabled else 0,
     )
+    progress_reporter = RichProgressReporter() if progress else NullProgressReporter()
     runner = ExperimentRunner(agent=agent, writer=writer,
         batch_size=settings.experiment.train_batch_size,
         concurrency=settings.model.concurrency, checkpoints=settings.experiment.checkpoints,
@@ -87,13 +93,14 @@ def run(config: Path = typer.Option(..., exists=True, dir_okay=False)) -> None:
                 for path in (settings.experiment.train_paths + settings.experiment.dev_paths
                              + settings.experiment.test_paths)
             },
-        })
+        }, progress_reporter=progress_reporter)
     train = [item for path in settings.experiment.train_paths for item in load_examples(path)]
     dev = [item for path in settings.experiment.dev_paths for item in load_examples(path)]
     test = [item for path in settings.experiment.test_paths for item in load_examples(path)]
     try:
         summary = asyncio.run(runner.run(train, dev, test))
     finally:
+        progress_reporter.close()
         repository.close()
     typer.echo(f"Completed {summary.completed_samples} training samples: {run_dir}")
 

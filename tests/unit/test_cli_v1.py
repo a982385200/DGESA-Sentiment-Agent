@@ -34,3 +34,9 @@ def test_experience_stats_reads_sqlite(tmp_path: Path) -> None:
     result = CliRunner().invoke(app, ["experience", "stats", "--run", str(run_dir)])
     assert result.exit_code == 0
     assert "0" in result.stdout
+
+
+def test_run_help_exposes_no_progress_switch() -> None:
+    result = CliRunner().invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--no-progress" in result.stdout

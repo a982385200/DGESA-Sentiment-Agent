@@ -39,6 +39,12 @@ uv run sentiment-agent validate-config --config configs/experiments/evolution.ya
 uv run sentiment-agent run --config configs/experiments/evolution.yaml
 ```
 
+运行时默认显示阶段、样本/批次进度、成功失败数、token、经验数量、耗时和 ETA。批处理脚本可关闭动态显示：
+
+```powershell
+uv run sentiment-agent run --config configs/experiments/evolution.yaml --no-progress
+```
+
 配置中的 `train_batch_size` 控制 mini-batch 大小。同一批共享批次开始时的经验快照，整批预测成功后再按原顺序学习；`train_batch_size: 1` 等价于逐样本在线学习。
 
 ## 查看经验

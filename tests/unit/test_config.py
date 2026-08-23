@@ -53,3 +53,11 @@ def test_config_hash_is_stable(tmp_path: Path) -> None:
     config = load_config(path)
 
     assert config_hash(config) == config_hash(config)
+
+
+def test_shipped_qwen_configs_use_project_api_key_name() -> None:
+    for path in (
+        Path("configs/experiments/baseline_zero_shot.yaml"),
+        Path("configs/experiments/evolution.yaml"),
+    ):
+        assert load_config(path).model.api_key_env == "OPENAI_API_KEY"

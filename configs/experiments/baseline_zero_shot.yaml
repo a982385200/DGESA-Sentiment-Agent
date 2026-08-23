@@ -1,9 +1,9 @@
 model:
   name: qwen-plus
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  api_key_env: QWEN_API_KEY
+  api_key_env: OPENAI_API_KEY
   temperature: 0.0
-  max_tokens: 256
+  max_tokens: 1024
   timeout_seconds: 60
   max_retries: 3
   concurrency: 4

@@ -12,7 +12,7 @@ Python 3.12 环境与依赖只使用 `uv`：
 uv sync --frozen --extra dev
 ```
 
-复制 `.env.example` 为 `.env`，填写 `QWEN_API_KEY`。密钥不会写入配置、日志或实验产物。SQLite 由 Python 自带，不需要安装数据库服务、账号或端口。
+复制 `.env.example` 为 `.env`，填写 `OPENAI_API_KEY`（这里存放 Qwen 兼容 API Key）。密钥不会写入配置、日志或实验产物。SQLite 由 Python 自带，不需要安装数据库服务、账号或端口。
 
 ## 测试
 

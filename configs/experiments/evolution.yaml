@@ -1,0 +1,7 @@
+seed: 42
+model:
+  name: gpt-4.1-mini
+experiment:
+  name: evolution
+  checkpoints: [0, 10, 50, 100]
+  reflection_enabled: true

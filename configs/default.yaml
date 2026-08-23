@@ -1,0 +1,23 @@
+seed: 42
+model:
+  name: gpt-4.1-mini
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+  embedding_model: text-embedding-3-small
+  temperature: 0.0
+  max_tokens: 256
+  timeout_seconds: 30
+  max_attempts: 3
+memory:
+  database_path: outputs/experience.sqlite3
+  retrieval_k: 5
+  min_reliability: 0.5
+strategy:
+  selector: epsilon_greedy
+  epsilon: 0.1
+experiment:
+  name: baseline
+  reflection_enabled: true
+  cross_lingual_enabled: true
+  checkpoints: [0]
+  output_root: outputs

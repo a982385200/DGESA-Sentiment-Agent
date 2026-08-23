@@ -1,0 +1,9 @@
+seed: 42
+model:
+  name: gpt-4.1-mini
+strategy:
+  selector: epsilon_greedy
+  epsilon: 0.1
+experiment:
+  name: strategy
+  checkpoints: [0, 50, 100]

@@ -11,6 +11,7 @@ from sentiment_agent.experience.updater import ExperienceUpdater
 from sentiment_agent.experience.vector_index import VectorIndex
 from sentiment_agent.experiments.artifacts import ArtifactWriter
 from sentiment_agent.experiments.runner import ExperimentRunner
+from sentiment_agent.experiments.progress import RecordingProgressReporter
 from sentiment_agent.llm.base import LLMResult, PredictionPayload
 from sentiment_agent.prompts.prediction import PredictionPromptBuilder
 from sentiment_agent.schemas import SentimentExample
@@ -34,13 +35,15 @@ def example(id_: str, label: str = "positive") -> SentimentExample:
 async def test_complete_offline_evolution_workflow(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     with ExperienceRepository(run_dir / "experience_store" / "experiences.sqlite3") as repo:
+        progress = RecordingProgressReporter()
         index = VectorIndex(run_dir / "experience_store")
         agent = SentimentAgent(embedding=FakeEmbedding(), llm=FakeLLM(),
             retriever=ExperienceRetriever(repo, RetrievalWeights()), updater=ExperienceUpdater(repo, index),
             vector_index=index, prompt_builder=PredictionPromptBuilder(), model_name="fake", retrieval_k=2)
         runner = ExperimentRunner(agent=agent, writer=ArtifactWriter(run_dir),
                                   batch_size=2, concurrency=2, checkpoints=[2, 4],
-                                  manifest_metadata={"config_hash": "offline-test"})
+                                  manifest_metadata={"config_hash": "offline-test"},
+                                  progress_reporter=progress)
         summary = await runner.run(
             [example("train-1"), example("train-2"), example("train-3"), example("train-4", "negative")],
             [example("dev-1")], [example("test-1")])
@@ -48,6 +51,10 @@ async def test_complete_offline_evolution_workflow(tmp_path: Path) -> None:
         assert summary.checkpoints == (2, 4)
         assert repo.count() == 4
         assert "test-1" not in {item.source_sample_id for item in repo.list()}
+        train_events = [event for event in progress.events if event.stage == "train"]
+        assert [event.completed_samples for event in train_events] == [2, 4]
+        assert [event.experience_count for event in train_events] == [2, 4]
+        assert {event.stage for event in progress.events} == {"train", "dev", "test"}
     rows = [json.loads(line) for line in (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines()]
     assert all(not row["retrieved_experience_ids"] for row in rows if row["batch_id"] == 1)
     assert any(row["retrieved_experience_ids"] for row in rows if row["batch_id"] == 2)

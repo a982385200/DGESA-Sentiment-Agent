@@ -8,7 +8,7 @@ model:
   max_retries: 3
   concurrency: 4
 embedding:
-  model_id: BAAI/bge-m3
+  model_id: models/embeddings/bge-m3
   device: cpu
   batch_size: 32
 retrieval:

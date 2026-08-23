@@ -4,6 +4,8 @@
 
 项目使用本地多语言 Embedding 和 LangChain Qwen API，在不更新基础模型参数的情况下研究 mini-batch 反馈驱动的经验演化。Python 环境和依赖统一由 `uv` 管理。
 
+默认从项目内的 `models/embeddings/bge-m3` 加载 Embedding，并强制使用本地文件。Zero-shot 配置关闭检索，因此不会加载或计算真实 Embedding。
+
 ## 环境
 
 Python 3.12 环境与依赖只使用 `uv`：

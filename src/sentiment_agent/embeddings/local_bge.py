@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+
+class DisabledEmbedding:
+    """Cheap placeholder for experiment modes that disable retrieval."""
+
+    def embed(self, texts: Sequence[str]) -> np.ndarray:
+        return np.ones((len(texts), 1), dtype=np.float32)
 
 
 class LocalBGEEmbedding:
@@ -26,7 +34,12 @@ class LocalBGEEmbedding:
         if self._encoder is None:
             from sentence_transformers import SentenceTransformer
 
-            self._encoder = SentenceTransformer(self.model_id, device=self.device)
+            model_path = Path(self.model_id).resolve()
+            if not model_path.is_dir():
+                raise FileNotFoundError(f"local embedding model directory not found: {model_path}")
+            self._encoder = SentenceTransformer(
+                str(model_path), device=self.device, local_files_only=True
+            )
         return self._encoder
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:

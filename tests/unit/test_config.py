@@ -61,3 +61,12 @@ def test_shipped_qwen_configs_use_project_api_key_name() -> None:
         Path("configs/experiments/evolution.yaml"),
     ):
         assert load_config(path).model.api_key_env == "OPENAI_API_KEY"
+
+
+def test_shipped_configs_use_local_embedding_path() -> None:
+    for path in (
+        Path("configs/default.yaml"),
+        Path("configs/experiments/baseline_zero_shot.yaml"),
+        Path("configs/experiments/evolution.yaml"),
+    ):
+        assert load_config(path).embedding.model_id == "models/embeddings/bge-m3"

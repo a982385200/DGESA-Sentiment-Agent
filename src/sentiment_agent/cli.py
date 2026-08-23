@@ -13,7 +13,7 @@ from sentiment_agent.agent.sentiment_agent import SentimentAgent
 from sentiment_agent.config import config_hash, load_config, redacted_config
 from sentiment_agent.data.loader import load_examples
 from sentiment_agent.data.fingerprint import fingerprint_file
-from sentiment_agent.embeddings.local_bge import LocalBGEEmbedding
+from sentiment_agent.embeddings.local_bge import DisabledEmbedding, LocalBGEEmbedding
 from sentiment_agent.experience.repository import ExperienceRepository
 from sentiment_agent.experience.retrieval import ExperienceRetriever, RetrievalWeights
 from sentiment_agent.experience.updater import ExperienceUpdater
@@ -49,9 +49,13 @@ def run(config: Path = typer.Option(..., exists=True, dir_okay=False)) -> None:
     store_dir = run_dir / "experience_store"
     repository = ExperienceRepository(store_dir / "experiences.sqlite3")
     index = VectorIndex(store_dir)
-    embedding = LocalBGEEmbedding(model_id=settings.embedding.model_id,
-                                  device=settings.embedding.device,
-                                  batch_size=settings.embedding.batch_size)
+    embedding = (
+        LocalBGEEmbedding(model_id=settings.embedding.model_id,
+                          device=settings.embedding.device,
+                          batch_size=settings.embedding.batch_size)
+        if settings.retrieval.enabled
+        else DisabledEmbedding()
+    )
     llm = LangChainQwenBackend(
         model_name=settings.model.name, base_url=str(settings.model.base_url),
         api_key_env=settings.model.api_key_env, temperature=settings.model.temperature,

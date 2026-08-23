@@ -1,0 +1,57 @@
+# Public configuration template. Replace placeholder paths before running.
+model:
+  name: qwen-plus
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key_env: OPENAI_API_KEY
+  temperature: 0.0
+  max_tokens: 1024
+  timeout_seconds: 60
+  max_retries: 3
+  concurrency: 4
+
+embedding:
+  model_id: /path/to/your/embedding/model
+  device: cpu
+  batch_size: 32
+
+retrieval:
+  enabled: true
+  k: 3
+  cross_lingual: true
+
+generalization:
+  enabled: false
+
+strategy:
+  enabled: false
+  default_strategy: experience
+  allowed_strategies: [experience]
+
+dgesa:
+  enabled: true
+  admission_candidates: 5
+  coverage_temperature: 0.10
+  low_coverage_threshold: 0.25
+  high_coverage_threshold: 0.85
+  alignment_candidates: 5
+  sample_similarity_threshold: 0.80
+  local_similarity_threshold: 0.95
+  sample_retrieval_k: 3
+  pattern_retrieval_k: 3
+  score_weights: [0.6, 0.3, 0.1]
+  minimum_active_reliability: 0.60
+  maximum_conflict_ratio: 0.20
+  minimum_global_languages: 3
+  minimum_language_support: 5
+  max_generation_attempts: 3
+
+experiment:
+  train_paths:
+    - datasets/mini_dataset/vietnamese/train.json
+  test_paths:
+    - datasets/mini_dataset/vietnamese/test.json
+  output_root: outputs
+  train_batch_size: 1
+  checkpoints: []
+  seed: 42
+  use_cache: true

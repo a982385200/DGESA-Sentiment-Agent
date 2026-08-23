@@ -1,6 +1,0 @@
-seed: 42
-model:
-  name: gpt-4.1-mini
-experiment:
-  name: baseline
-  checkpoints: [0]

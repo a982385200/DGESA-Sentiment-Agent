@@ -1,7 +1,0 @@
-seed: 42
-model:
-  name: gpt-4.1-mini
-experiment:
-  name: transfer
-  cross_lingual_enabled: true
-  checkpoints: [0]

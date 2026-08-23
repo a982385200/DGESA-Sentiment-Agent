@@ -1,6 +1,0 @@
-{"id":"vi-train-1","text":"good training sample one","label":"positive","language":"vi","source":"fixture"}
-{"id":"vi-train-2","text":"bad training sample two","label":"negative","language":"vi","source":"fixture"}
-{"id":"vi-train-3","text":"okay training sample three","label":"neutral","language":"vi","source":"fixture"}
-{"id":"th-train-1","text":"good training sample four","label":"positive","language":"th","source":"fixture"}
-{"id":"th-train-2","text":"bad training sample five","label":"negative","language":"th","source":"fixture"}
-{"id":"th-train-3","text":"okay training sample six","label":"neutral","language":"th","source":"fixture"}

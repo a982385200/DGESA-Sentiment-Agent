@@ -26,7 +26,7 @@ uv run sentiment-agent run --config configs/experiments/evolution_mini.yaml
 
 每次运行在 `outputs/<run-id>/` 保存：
 
-- `predictions.jsonl`：train/dev/test 的逐样本预测、标签、理由和检索规则 ID。
+- `predictions.jsonl`：train/test 的逐样本预测、标签、理由和检索规则 ID。
 - `experience_store/experiences.sqlite3`：案例、归因、规则、证据关系、生命周期事件和使用结果。
 - `generalized_experiences.jsonl`：通用经验规则快照。
 - `attributions.jsonl`：错误归因记录。

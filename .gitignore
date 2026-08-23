@@ -14,6 +14,50 @@ dist/
 .env.*
 !.env.example
 outputs/
+models/
 .cache/
 *.sqlite
 *.sqlite3
+tmp/
+paper/
+plots/
+.legacy-disabled/
+
+# Local experiment configurations; publish only configs/*.example.yaml
+configs/experiments/
+
+# Keep local datasets private; publish only the Vietnamese mini demo split.
+datasets/*
+!datasets/mini_dataset/
+datasets/mini_dataset/*
+!datasets/mini_dataset/vietnamese/
+datasets/mini_dataset/vietnamese/*
+!datasets/mini_dataset/vietnamese/train.json
+!datasets/mini_dataset/vietnamese/test.json
+
+# Internal research notes and legacy benchmark utilities
+ASEAN_Self_Evolving_Sentiment_Agent_Paper_Design.md
+docs/*.pdf
+docs/benchmark_literature_results.md
+docs/superpowers/
+scripts/
+src/sentiment_agent/benchmarks/
+tests/unit/test_zero_shot_benchmark.py
+
+# Document and LaTeX build artifacts
+paper/.qa*/
+paper/.ps_check/
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.ps
+*.stdout.log
+*.stderr.log
+*.tmp
+~$*
+~$$*
+
+# OS metadata
+.DS_Store
+Thumbs.db

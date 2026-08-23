@@ -35,14 +35,19 @@ class Usage(StrictModel):
 
 class Prediction(StrictModel):
     sample_id: str = Field(min_length=1)
+    predicted_language: str = Field(default="unknown", min_length=1)
+    predicted_domain: str = Field(default="unknown", min_length=1)
     label: SentimentLabel
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     reason: str = Field(min_length=1)
     retrieved_experience_ids: tuple[str, ...] = ()
     model_name: str = Field(min_length=1)
     usage: Usage = Usage()
     latency_seconds: float = Field(default=0.0, ge=0.0)
     cache_key: str | None = None
+    model_calls: int = Field(default=1, ge=1)
+    strategy: Literal["direct", "translation", "experience", "reflection"] = "experience"
+    cross_lingual_experience_ids: tuple[str, ...] = ()
 
 
 class Feedback(StrictModel):

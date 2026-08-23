@@ -72,6 +72,21 @@ class ExperimentRunner:
         except Exception:
             pass
 
+    def _write_prediction_rows(self, examples, predictions, *, split: str,
+                               batch_id: int, checkpoint: int | None) -> None:
+        for example, prediction in zip(examples, predictions, strict=True):
+            self.writer.append_jsonl("predictions.jsonl", {
+                "split": split,
+                "checkpoint": checkpoint,
+                "batch_id": batch_id,
+                "sample_id": example.id,
+                "text": example.text,
+                "language": example.language,
+                "source": example.source,
+                "gold_label": example.label,
+                **prediction.model_dump(mode="json"),
+            })
+
     async def evaluate(self, examples: Sequence[SentimentExample], *, split: str,
                        checkpoint: int | None = None) -> dict:
         predictions = []
@@ -81,6 +96,8 @@ class ExperimentRunner:
             current = await self.agent.predict_batch(
                 [example.to_prediction_input() for example in batch], max_concurrency=self.concurrency)
             predictions.extend(current)
+            self._write_prediction_rows(
+                batch, current, split=split, batch_id=batch_number, checkpoint=checkpoint)
             self._record_usage(current)
             completed += len(batch)
             self._report(stage=split, completed=completed, total=len(examples),
@@ -110,10 +127,8 @@ class ExperimentRunner:
             self._report(stage="train", completed=processed, total=len(train),
                          completed_batches=batch_id, total_batches=len(training_batches),
                          checkpoint=processed if processed in self.checkpoints else None)
-            for example, prediction in zip(batch, predictions, strict=True):
-                self.writer.append_jsonl("predictions.jsonl", {
-                    "split": "train", "batch_id": batch_id, "sample_id": example.id,
-                    "gold_label": example.label, **prediction.model_dump(mode="json")})
+            self._write_prediction_rows(
+                batch, predictions, split="train", batch_id=batch_id, checkpoint=None)
             if processed in self.checkpoints:
                 reached.append(processed)
                 await self.evaluate(dev, split="dev", checkpoint=processed)

@@ -56,8 +56,17 @@ async def test_complete_offline_evolution_workflow(tmp_path: Path) -> None:
         assert [event.experience_count for event in train_events] == [2, 4]
         assert {event.stage for event in progress.events} == {"train", "dev", "test"}
     rows = [json.loads(line) for line in (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert all(not row["retrieved_experience_ids"] for row in rows if row["batch_id"] == 1)
-    assert any(row["retrieved_experience_ids"] for row in rows if row["batch_id"] == 2)
+    train_rows = [row for row in rows if row["split"] == "train"]
+    assert all(not row["retrieved_experience_ids"] for row in train_rows if row["batch_id"] == 1)
+    assert any(row["retrieved_experience_ids"] for row in train_rows if row["batch_id"] == 2)
+    test_rows = [row for row in rows if row["split"] == "test"]
+    assert len(test_rows) == 1
+    assert test_rows[0]["sample_id"] == "test-1"
+    assert test_rows[0]["text"] == "text test-1"
+    assert test_rows[0]["language"] == "vi"
+    assert test_rows[0]["gold_label"] == "positive"
+    assert test_rows[0]["label"] == "positive"
+    assert test_rows[0]["checkpoint"] is None
     assert (run_dir / "metrics.json").exists()
     manifest = json.loads((run_dir / "manifest.json").read_text())
     assert manifest["status"] == "completed"

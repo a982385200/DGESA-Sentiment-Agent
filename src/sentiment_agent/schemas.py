@@ -3,107 +3,92 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SentimentLabel = Literal["negative", "neutral", "positive"]
-Split = Literal["train", "dev", "test"]
-LanguageCode = Literal["vi", "th", "id", "ms", "km"]
-ExperienceType = Literal["successful_case", "error_correction", "generalized_rule"]
+SentimentLabel = Literal["positive", "neutral", "negative"]
+Language = Literal["vi", "th", "id", "ms", "km"]
+ExperienceType = Literal["successful_case", "error_correction"]
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class SentimentExample(StrictModel):
-    id: str = Field(min_length=1)
-    text: str
-    language: LanguageCode
-    source: str = Field(min_length=1)
-    split: Split
-    label: SentimentLabel
-
-    @field_validator("text")
-    @classmethod
-    def text_must_not_be_blank(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("text must not be blank")
-        return normalized
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class PredictionInput(StrictModel):
     id: str = Field(min_length=1)
-    text: str
-    language: LanguageCode
+    text: str = Field(min_length=1)
+    language: Language
     source: str = Field(min_length=1)
 
-    @field_validator("text")
-    @classmethod
-    def text_must_not_be_blank(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("text must not be blank")
-        return normalized
+
+class SentimentExample(PredictionInput):
+    label: SentimentLabel
+
+    def to_prediction_input(self) -> PredictionInput:
+        return PredictionInput(**self.model_dump(exclude={"label"}))
 
 
 class Usage(StrictModel):
-    prompt_tokens: int = Field(default=0, ge=0)
-    completion_tokens: int = Field(default=0, ge=0)
-
-    @computed_field
-    @property
-    def total_tokens(self) -> int:
-        return self.prompt_tokens + self.completion_tokens
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
 
 
 class Prediction(StrictModel):
-    sample_id: str
+    sample_id: str = Field(min_length=1)
     label: SentimentLabel
     confidence: float = Field(ge=0.0, le=1.0)
-    reason: str
-    strategy: str
-    retrieved_experience_ids: list[str] = Field(default_factory=list)
-    model_name: str
-    usage: Usage = Field(default_factory=Usage)
+    reason: str = Field(min_length=1)
+    retrieved_experience_ids: tuple[str, ...] = ()
+    model_name: str = Field(min_length=1)
+    usage: Usage = Usage()
     latency_seconds: float = Field(default=0.0, ge=0.0)
     cache_key: str | None = None
 
 
 class Feedback(StrictModel):
-    sample_id: str
+    sample_id: str = Field(min_length=1)
     predicted_label: SentimentLabel
     gold_label: SentimentLabel
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    correct: bool
 
-    @computed_field
-    @property
-    def correct(self) -> bool:
-        return self.predicted_label == self.gold_label
+    @model_validator(mode="after")
+    def validate_correct(self) -> Feedback:
+        if self.correct != (self.predicted_label == self.gold_label):
+            raise ValueError("correct must match predicted and gold labels")
+        return self
 
 
 class Experience(StrictModel):
-    id: str | None = None
-    text: str
-    language: LanguageCode
-    source: str
-    semantic_meaning: str
+    id: str = Field(min_length=1)
+    type: ExperienceType
+    language: Language
+    source: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    semantic_summary: str = Field(min_length=1)
     sentiment: SentimentLabel
-    reason: str
-    experience_type: ExperienceType
-    success_count: int = Field(default=1, ge=0)
-    failure_count: int = Field(default=0, ge=0)
+    reason: str = Field(min_length=1)
     reliability: float = Field(default=0.5, ge=0.0, le=1.0)
-    created_round: int = Field(default=0, ge=0)
-    last_used_round: int = Field(default=0, ge=0)
+    success_count: int = Field(default=0, ge=0)
+    failure_count: int = Field(default=0, ge=0)
+    source_sample_id: str = Field(min_length=1)
+    created_batch: int = Field(ge=0)
+    last_used_batch: int = Field(ge=0)
+    status: Literal["active"] = "active"
 
 
-class ExperimentRecord(StrictModel):
-    experiment_id: str
-    config_hash: str
-    seed: int
-    git_commit: str | None = None
-    model_name: str
-    dataset_version: str | None = None
-    metrics: dict[str, float] = Field(default_factory=dict)
-    estimated_cost: float = Field(default=0.0, ge=0.0)
+class RetrievedExperience(StrictModel):
+    experience: Experience
+    score: float
+    score_components: dict[str, float]
+    rank: int = Field(ge=1)
+
+
+class ExperienceEvent(StrictModel):
+    id: int | None = None
+    experience_id: str
+    batch_id: int = Field(ge=0)
+    event_type: Literal["created", "reinforced", "penalized"]
+    old_value: dict | None = None
+    new_value: dict
+    reason: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

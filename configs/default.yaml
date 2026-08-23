@@ -1,23 +1,31 @@
-seed: 42
 model:
-  name: gpt-4.1-mini
-  base_url: https://api.openai.com/v1
-  api_key_env: OPENAI_API_KEY
-  embedding_model: text-embedding-3-small
+  name: qwen-plus
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key_env: QWEN_API_KEY
   temperature: 0.0
   max_tokens: 256
-  timeout_seconds: 30
-  max_attempts: 3
-memory:
-  database_path: outputs/experience.sqlite3
-  retrieval_k: 5
-  min_reliability: 0.5
-strategy:
-  selector: epsilon_greedy
-  epsilon: 0.1
+  timeout_seconds: 60
+  max_retries: 3
+  concurrency: 4
+embedding:
+  model_id: BAAI/bge-m3
+  device: cpu
+  batch_size: 32
+retrieval:
+  enabled: true
+  k: 5
+  minimum_reliability: 0.0
+  semantic_weight: 1.0
+  language_weight: 0.1
+  source_weight: 0.05
+  reliability_weight: 0.1
+  cross_lingual: true
 experiment:
-  name: baseline
-  reflection_enabled: true
-  cross_lingual_enabled: true
-  checkpoints: [0]
+  train_paths: []
+  dev_paths: []
+  test_paths: []
   output_root: outputs
+  train_batch_size: 8
+  checkpoints: []
+  seed: 42
+  use_cache: true

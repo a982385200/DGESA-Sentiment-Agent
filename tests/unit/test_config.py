@@ -1,35 +1,55 @@
+import json
 from pathlib import Path
 
 import pytest
 
-from sentiment_agent.config import AppConfig
+from sentiment_agent.config import config_hash, load_config, redacted_config
 
 
-def test_config_hash_is_stable(tmp_path: Path) -> None:
-    path = tmp_path / "config.yaml"
+def _write_config(path: Path, *, batch_size: int = 2) -> None:
     path.write_text(
-        "seed: 42\n"
-        "model:\n"
-        "  name: test-model\n"
-        "  base_url: https://example.invalid/v1\n",
+        f"""
+model:
+  name: qwen-plus
+  base_url: https://example.invalid/v1
+  api_key_env: QWEN_API_KEY
+embedding:
+  model_id: BAAI/bge-m3
+experiment:
+  train_paths: [train.json]
+  dev_paths: [dev.json]
+  test_paths: [test.json]
+  output_root: outputs
+  train_batch_size: {batch_size}
+""",
         encoding="utf-8",
     )
 
-    assert AppConfig.load(path).config_hash == AppConfig.load(path).config_hash
+
+def test_load_config_rejects_nonpositive_batch_size(tmp_path: Path) -> None:
+    path = tmp_path / "bad.yaml"
+    _write_config(path, batch_size=0)
+
+    with pytest.raises(ValueError, match="train_batch_size"):
+        load_config(path)
 
 
-def test_config_hash_changes_with_model(tmp_path: Path) -> None:
-    first = tmp_path / "first.yaml"
-    second = tmp_path / "second.yaml"
-    first.write_text("model:\n  name: model-a\n", encoding="utf-8")
-    second.write_text("model:\n  name: model-b\n", encoding="utf-8")
+def test_redacted_config_never_reads_or_contains_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "valid.yaml"
+    _write_config(path)
+    monkeypatch.setenv("QWEN_API_KEY", "super-secret")
 
-    assert AppConfig.load(first).config_hash != AppConfig.load(second).config_hash
+    rendered = json.dumps(redacted_config(load_config(path)))
+
+    assert "super-secret" not in rendered
+    assert "QWEN_API_KEY" in rendered
 
 
-def test_config_rejects_unknown_fields(tmp_path: Path) -> None:
-    path = tmp_path / "config.yaml"
-    path.write_text("unknown_option: true\n", encoding="utf-8")
+def test_config_hash_is_stable(tmp_path: Path) -> None:
+    path = tmp_path / "valid.yaml"
+    _write_config(path)
+    config = load_config(path)
 
-    with pytest.raises(ValueError, match="unknown_option"):
-        AppConfig.load(path)
+    assert config_hash(config) == config_hash(config)

@@ -26,7 +26,7 @@ class SentimentAgent:
     def __init__(self, *, embedding: EmbeddingBackend, llm: LLMBackend,
                  retriever: ExperienceRetriever, updater: ExperienceUpdater,
                  vector_index: VectorIndex, prompt_builder: PredictionPromptBuilder,
-                 model_name: str, retrieval_k: int) -> None:
+                 model_name: str, retrieval_k: int, evolution_service=None) -> None:
         self.embedding = embedding
         self.llm = llm
         self.retriever = retriever
@@ -35,6 +35,7 @@ class SentimentAgent:
         self.prompt_builder = prompt_builder
         self.model_name = model_name
         self.retrieval_k = retrieval_k
+        self.evolution_service = evolution_service
         self._contexts: dict[str, PredictionContext] = {}
 
     async def predict_batch(self, items: Sequence[PredictionInput], *, max_concurrency: int) -> list[Prediction]:
@@ -73,12 +74,7 @@ class SentimentAgent:
 
     def learn_batch(self, items: Sequence[PredictionInput], predictions: Sequence[Prediction],
                     feedback: Sequence[Feedback], *, batch_id: int):
-        triples = list(zip(items, predictions, feedback, strict=True))
-        for item, prediction, outcome in triples:
-            if item.id != prediction.sample_id or item.id != outcome.sample_id:
-                raise ValueError("sample id mismatch in learning batch")
-            if prediction.label != outcome.predicted_label or item.id not in self._contexts:
-                raise ValueError("learning requires matching prior predictions")
+        triples = self._validated_learning_rows(items, predictions, feedback)
         learned = []
         for item, prediction, outcome in triples:
             context = self._contexts[item.id]
@@ -86,3 +82,29 @@ class SentimentAgent:
                                               context.vector, batch_id=batch_id))
             del self._contexts[item.id]
         return learned
+
+    async def evolve_batch(self, items: Sequence[PredictionInput], predictions: Sequence[Prediction],
+                           feedback: Sequence[Feedback], *, batch_id: int):
+        if self.evolution_service is None:
+            raise RuntimeError("generalized experience evolution is not configured")
+        triples = self._validated_learning_rows(items, predictions, feedback)
+        contexts = [self._contexts[item.id].retrieved for item, _, _ in triples]
+        learned = await self.evolution_service.learn_batch(
+            items, predictions, feedback, contexts, batch_id=batch_id)
+        for item, _, _ in triples:
+            del self._contexts[item.id]
+        return learned
+
+    def experience_count(self) -> int:
+        if self.evolution_service is not None:
+            return int(self.evolution_service.repository.stats()["active_count"])
+        return self.updater.repository.count()
+
+    def _validated_learning_rows(self, items, predictions, feedback):
+        triples = list(zip(items, predictions, feedback, strict=True))
+        for item, prediction, outcome in triples:
+            if item.id != prediction.sample_id or item.id != outcome.sample_id:
+                raise ValueError("sample id mismatch in learning batch")
+            if prediction.label != outcome.predicted_label or item.id not in self._contexts:
+                raise ValueError("learning requires matching prior predictions")
+        return triples

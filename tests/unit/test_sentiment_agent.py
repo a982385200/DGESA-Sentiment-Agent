@@ -27,6 +27,16 @@ class FakeLLM:
         return LLMResult(payload=PredictionPayload(label="positive", confidence=.8, reason=item["text"]))
 
 
+class FakeEvolutionService:
+    def __init__(self):
+        self.calls = []
+        self.repository = type("Repository", (), {"stats": lambda self: {"active_count": 3}})()
+
+    async def learn_batch(self, items, predictions, feedback, retrieved_contexts, *, batch_id):
+        self.calls.append((items, predictions, feedback, retrieved_contexts, batch_id))
+        return ["generalized"]
+
+
 @pytest.mark.anyio
 async def test_batch_embeds_once_and_preserves_order(tmp_path: Path) -> None:
     embedding = FakeEmbedding()
@@ -58,3 +68,27 @@ async def test_experience_is_visible_only_to_next_batch(tmp_path: Path) -> None:
         second = await agent.predict_batch(
             [PredictionInput(id="2", text="2", language="vi", source="tiny")], max_concurrency=1)
         assert second[0].retrieved_experience_ids
+
+
+@pytest.mark.anyio
+async def test_evolve_batch_delegates_prediction_context_and_reports_active_count(tmp_path: Path) -> None:
+    evolution = FakeEvolutionService()
+    with ExperienceRepository(tmp_path / "db.sqlite3") as repo:
+        index = VectorIndex(tmp_path / "index")
+        agent = SentimentAgent(embedding=FakeEmbedding(), llm=FakeLLM(),
+            retriever=ExperienceRetriever(repo, RetrievalWeights()),
+            updater=ExperienceUpdater(repo, index), vector_index=index,
+            prompt_builder=PredictionPromptBuilder(), model_name="fake", retrieval_k=3,
+            evolution_service=evolution)
+        items = [PredictionInput(id="x", text="text", language="vi", source="tiny")]
+        predictions = await agent.predict_batch(items, max_concurrency=1)
+        feedback = [Feedback(sample_id="x", predicted_label="positive",
+                             gold_label="negative", correct=False)]
+
+        learned = await agent.evolve_batch(items, predictions, feedback, batch_id=2)
+
+        assert learned == ["generalized"]
+        assert evolution.calls[0][3][0] == ()
+        assert agent.experience_count() == 3
+        with pytest.raises(ValueError, match="matching prior predictions"):
+            await agent.evolve_batch(items, predictions, feedback, batch_id=2)

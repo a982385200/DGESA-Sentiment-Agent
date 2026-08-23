@@ -20,7 +20,9 @@ class FakeEmbedding:
 
 
 class StaticAttributor:
-    def __init__(self): self.calls = 0
+    def __init__(self, used_fallback=False):
+        self.calls = 0
+        self.used_fallback = used_fallback
     async def attribute(self, case, retrieved):
         self.calls += 1
         attribution = Attribution(
@@ -31,7 +33,8 @@ class StaticAttributor:
             scope_languages=(case.language,), scope_sources=(case.source,),
             phenomena=("uncompleted_event",), confidence=0.9, created_batch=case.batch_id,
         )
-        return AttributionResult(attribution=attribution, used_fallback=False)
+        return AttributionResult(attribution=attribution, used_fallback=self.used_fallback,
+                                 raw_responses=("invalid",) if self.used_fallback else ())
 
 
 def item(sample_id):
@@ -87,3 +90,19 @@ async def test_correct_sample_does_not_call_attributor(tmp_path: Path) -> None:
         await service.learn_batch([item("ok")], [prediction], [outcome], [[]], batch_id=1)
         assert attributor.calls == 0
         assert repo.stats()["case_count"] == 1
+
+
+@pytest.mark.anyio
+async def test_attribution_fallback_is_retained_for_audit(tmp_path: Path) -> None:
+    with EvolutionRepository(tmp_path / "db.sqlite3") as repo:
+        index = VectorIndex(tmp_path / "rules")
+        service = ExperienceEvolutionService(
+            repository=repo, embedding=FakeEmbedding(), attributor=StaticAttributor(True),
+            matcher=RuleMatcher(repo, index, merge_similarity=.85), vector_index=index,
+            lifecycle=LifecyclePolicy())
+        await service.learn_batch([item("fallback")], [wrong("fallback")],
+                                  [feedback("fallback")], [[]], batch_id=1)
+        assert service.attribution_failures == [{
+            "case_id": repo.list_attributions()[0].case_id,
+            "raw_responses": ["invalid"],
+        }]

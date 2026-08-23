@@ -10,6 +10,7 @@ import typer
 from dotenv import load_dotenv
 
 from sentiment_agent.agent.sentiment_agent import SentimentAgent
+from sentiment_agent.attribution.llm_attributor import LangChainTextClient, LLMAttributor
 from sentiment_agent.config import config_hash, load_config, redacted_config
 from sentiment_agent.data.loader import load_examples
 from sentiment_agent.data.fingerprint import fingerprint_file
@@ -20,6 +21,11 @@ from sentiment_agent.experience.updater import ExperienceUpdater
 from sentiment_agent.experience.vector_index import VectorIndex
 from sentiment_agent.experiments.artifacts import ArtifactWriter
 from sentiment_agent.experiments.runner import ExperimentRunner
+from sentiment_agent.generalization.lifecycle import LifecyclePolicy
+from sentiment_agent.generalization.matcher import RuleMatcher
+from sentiment_agent.generalization.repository import EvolutionRepository
+from sentiment_agent.generalization.retrieval import GeneralizedExperienceRetriever
+from sentiment_agent.generalization.service import ExperienceEvolutionService
 from sentiment_agent.llm.langchain_qwen import LangChainQwenBackend
 from sentiment_agent.prompts.prediction import PredictionPromptBuilder
 from sentiment_agent.experiments.progress import NullProgressReporter
@@ -53,12 +59,13 @@ def run(
     writer.write_json("resolved_config.json", redacted_config(settings))
     store_dir = run_dir / "experience_store"
     repository = ExperienceRepository(store_dir / "experiences.sqlite3")
-    index = VectorIndex(store_dir)
+    evolution_repository = None
+    index = VectorIndex(store_dir / "generalized_index" if settings.generalization.enabled else store_dir)
     embedding = (
         LocalBGEEmbedding(model_id=settings.embedding.model_id,
                           device=settings.embedding.device,
                           batch_size=settings.embedding.batch_size)
-        if settings.retrieval.enabled
+        if settings.retrieval.enabled or settings.generalization.enabled
         else DisabledEmbedding()
     )
     llm = LangChainQwenBackend(
@@ -70,14 +77,38 @@ def run(
     weights = RetrievalWeights(
         semantic=settings.retrieval.semantic_weight, language=settings.retrieval.language_weight,
         source=settings.retrieval.source_weight, reliability=settings.retrieval.reliability_weight)
-    agent = SentimentAgent(
-        embedding=embedding, llm=llm,
-        retriever=ExperienceRetriever(repository, weights,
+    evolution_service = None
+    if settings.generalization.enabled:
+        evolution_repository = EvolutionRepository(store_dir / "experiences.sqlite3")
+        retriever = GeneralizedExperienceRetriever(
+            evolution_repository, index, weights,
             minimum_reliability=settings.retrieval.minimum_reliability,
-            cross_lingual=settings.retrieval.cross_lingual),
+            cross_lingual=settings.retrieval.cross_lingual)
+        evolution_service = ExperienceEvolutionService(
+            repository=evolution_repository, embedding=embedding,
+            attributor=LLMAttributor(
+                LangChainTextClient(llm.chat_model), max_retries=settings.attribution.max_retries),
+            matcher=RuleMatcher(
+                evolution_repository, index,
+                merge_similarity=settings.generalization.merge_similarity),
+            vector_index=index,
+            lifecycle=LifecyclePolicy(
+                minimum_support=settings.generalization.minimum_support,
+                minimum_batches=settings.generalization.minimum_batches,
+                maximum_contradiction_ratio=settings.generalization.maximum_contradiction_ratio,
+                minimum_active_reliability=settings.generalization.minimum_active_reliability),
+        )
+    else:
+        retriever = ExperienceRetriever(
+            repository, weights,
+            minimum_reliability=settings.retrieval.minimum_reliability,
+            cross_lingual=settings.retrieval.cross_lingual)
+    agent = SentimentAgent(
+        embedding=embedding, llm=llm, retriever=retriever,
         updater=ExperienceUpdater(repository, index), vector_index=index,
         prompt_builder=PredictionPromptBuilder(), model_name=settings.model.name,
         retrieval_k=settings.retrieval.k if settings.retrieval.enabled else 0,
+        evolution_service=evolution_service,
     )
     progress_reporter = RichProgressReporter() if progress else NullProgressReporter()
     runner = ExperimentRunner(agent=agent, writer=writer,
@@ -101,6 +132,8 @@ def run(
         summary = asyncio.run(runner.run(train, dev, test))
     finally:
         progress_reporter.close()
+        if evolution_repository is not None:
+            evolution_repository.close()
         repository.close()
     typer.echo(f"Completed {summary.completed_samples} training samples: {run_dir}")
 

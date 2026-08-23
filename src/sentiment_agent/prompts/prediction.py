@@ -16,12 +16,26 @@ Use only the input and supplied experiences. Return JSON with label, confidence,
 class PredictionPromptBuilder:
     def build(self, item: PredictionInput,
               experiences: Sequence[RetrievedExperience]) -> list[BaseMessage]:
-        context = [{
-            "sentiment": result.experience.sentiment,
-            "semantic_summary": result.experience.semantic_summary,
-            "reason": result.experience.reason,
-            "reliability": result.experience.reliability,
-        } for result in experiences]
+        context = []
+        for result in experiences:
+            experience = result.experience
+            if hasattr(experience, "rule"):
+                context.append({
+                    "semantic": experience.semantic,
+                    "sentiment": experience.sentiment,
+                    "rule": experience.rule,
+                    "corrected_reason": experience.corrected_reason,
+                    "scope_languages": experience.scope_languages,
+                    "scope_sources": experience.scope_sources,
+                    "reliability": experience.reliability,
+                })
+            else:
+                context.append({
+                    "sentiment": experience.sentiment,
+                    "semantic_summary": experience.semantic_summary,
+                    "reason": experience.reason,
+                    "reliability": experience.reliability,
+                })
         payload = {"id": item.id, "language": item.language, "source": item.source,
                    "text": item.text, "relevant_experiences": context}
         return [SystemMessage(content=BASE_PROMPT),

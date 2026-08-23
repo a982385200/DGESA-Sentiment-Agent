@@ -24,6 +24,7 @@ class ExperienceEvolutionService:
         self.matcher = matcher
         self.vector_index = vector_index
         self.lifecycle = lifecycle
+        self.attribution_failures: list[dict] = []
 
     async def learn_batch(self, items: Sequence[PredictionInput],
                           predictions: Sequence[Prediction], feedback: Sequence[Feedback],
@@ -39,6 +40,11 @@ class ExperienceEvolutionService:
                 self._record_existing_rule_evidence(case, retrieved)
                 continue
             result = await self.attributor.attribute(case, retrieved)
+            if result.used_fallback:
+                self.attribution_failures.append({
+                    "case_id": case.id,
+                    "raw_responses": list(result.raw_responses),
+                })
             attribution = result.attribution
             self.repository.create_attribution(attribution)
             vector = self.embedding.embed([

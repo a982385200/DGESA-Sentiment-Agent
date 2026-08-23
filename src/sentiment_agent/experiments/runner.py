@@ -67,7 +67,7 @@ class ExperimentRunner:
                 successful_requests=self._calls, failed_requests=0,
                 input_tokens=self._input_tokens, output_tokens=self._output_tokens,
                 elapsed_seconds=time.monotonic() - self._started_monotonic,
-                experience_count=self.agent.updater.repository.count(), checkpoint=checkpoint,
+                experience_count=self.agent.experience_count(), checkpoint=checkpoint,
             ))
         except Exception:
             pass
@@ -121,7 +121,10 @@ class ExperimentRunner:
             feedback = [Feedback(sample_id=prediction.sample_id, predicted_label=prediction.label,
                                  gold_label=example.label, correct=prediction.label == example.label)
                         for example, prediction in zip(batch, predictions, strict=True)]
-            self.agent.learn_batch(items, predictions, feedback, batch_id=batch_id)
+            if self.agent.evolution_service is not None:
+                await self.agent.evolve_batch(items, predictions, feedback, batch_id=batch_id)
+            else:
+                self.agent.learn_batch(items, predictions, feedback, batch_id=batch_id)
             processed += len(batch)
             training_batches = partition_batches(list(train), self.batch_size, self.checkpoints)
             self._report(stage="train", completed=processed, total=len(train),
@@ -138,6 +141,7 @@ class ExperimentRunner:
             "calls": self._calls, "input_tokens": self._input_tokens,
             "output_tokens": self._output_tokens,
         })
+        self._write_evolution_artifacts()
         self.writer.write_json("manifest.json", {
             **self.manifest_metadata,
             "status": "completed", "started_at": started_at,
@@ -145,3 +149,25 @@ class ExperimentRunner:
             "completed_samples": processed, "checkpoints": reached,
         })
         return RunSummary(self.writer.run_dir, processed, tuple(reached), metrics)
+
+    def _write_evolution_artifacts(self) -> None:
+        if self.agent.evolution_service is None:
+            return
+        repository = self.agent.evolution_service.repository
+        rules = repository.list_rules()
+        for rule in rules:
+            self.writer.append_jsonl(
+                "generalized_experiences.jsonl", rule.model_dump(mode="json"))
+        for attribution in repository.list_attributions():
+            self.writer.append_jsonl("attributions.jsonl", attribution.model_dump(mode="json"))
+        for failure in self.agent.evolution_service.attribution_failures:
+            self.writer.append_jsonl("attribution_failures.jsonl", failure)
+        stats = repository.stats()
+        rule_count = len(rules)
+        case_count = stats["case_count"]
+        self.writer.write_json("experience_evolution_metrics.json", {
+            **stats,
+            "error_case_count": stats["attribution_count"],
+            "rule_count": rule_count,
+            "compression_ratio": 0.0 if case_count == 0 else 1.0 - rule_count / case_count,
+        })

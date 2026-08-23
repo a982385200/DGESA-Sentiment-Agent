@@ -152,6 +152,8 @@ Macro-F1 为主要指标，Accuracy 和每类别 Precision、Recall、F1 为辅�
 
 YAML 配置继承默认配置并覆盖实验差异。程序启动时解析为强类型配置，计算配置哈希，并将最终展开配置复制到输出目录。
 
+Python 环境与依赖统一由 `uv` 管理。项目必须提交 `pyproject.toml` 和 `uv.lock`；开发环境使用 `uv sync --extra dev`，复现实验与 CI 使用 `uv sync --frozen --extra dev`，所有 Python、测试和 CLI 命令通过 `uv run` 执行。项目不得使用 `pip install`、Poetry、Conda 环境变更或手工维护的虚拟环境作为正式开发流程。
+
 每次运行创建独立目录，保存 `config.yaml`、`manifest.json`、`predictions.jsonl`、`metrics.json`、`costs.json`、运行日志、经验库快照和错误记录。运行中断后可基于检查点继续，已完成样本不得重复写入反馈。
 
 API Key 只从环境变量读取，日志和输出不得保存密钥或完整认证头。

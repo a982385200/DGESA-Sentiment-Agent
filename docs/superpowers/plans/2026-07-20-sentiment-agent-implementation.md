@@ -6,7 +6,7 @@
 
 **Architecture:** A single-process Python package separates prediction from feedback learning so test labels cannot enter memory. Components communicate through Pydantic models; SQLite stores structured experiences; an OpenAI-compatible HTTP client supplies classification, reflection, translation, and embeddings; YAML-driven experiment runners produce auditable JSONL and JSON artifacts.
 
-**Tech Stack:** Python 3.12, Pydantic 2, pydantic-settings, httpx, PyYAML, NumPy, scikit-learn, Typer, pytest, pytest-httpx, pytest-cov, SQLite.
+**Tech Stack:** Python 3.12 managed by uv, Pydantic 2, pydantic-settings, httpx, PyYAML, NumPy, scikit-learn, Typer, pytest, pytest-httpx, pytest-cov, SQLite.
 
 ## Global Constraints
 
@@ -18,6 +18,8 @@
 - Macro-F1 is the primary metric; also record Accuracy, per-class metrics, latency, tokens, failures, and estimated cost.
 - Every experiment saves its expanded configuration, configuration hash, predictions, metrics, costs, errors, and memory snapshot.
 - Use deterministic seed `42` unless an experiment configuration explicitly overrides it.
+- Use `uv` exclusively: commit `uv.lock`, install with `uv sync --extra dev`, reproduce with `uv sync --frozen --extra dev`, and execute every Python command through `uv run`.
+- Do not use `pip install`, Poetry, Conda environment mutation, or manually managed virtual environments.
 
 ---
 
@@ -57,7 +59,7 @@ def test_config_hash_is_stable(tmp_path):
 
 - [ ] **Step 2: Run tests and verify import failures**
 
-Run: `python -m pytest tests/unit/test_config.py tests/unit/test_schemas.py -q`
+Run: `uv run pytest tests/unit/test_config.py tests/unit/test_schemas.py -q`
 
 Expected: collection fails because `sentiment_agent.config` and `sentiment_agent.schemas` do not exist.
 
@@ -81,7 +83,7 @@ def test_training_feedback_requires_matching_example(example):
         stream.feedback(item, predicted="positive", sample_id="wrong")
 ```
 
-Run: `python -m pytest tests/unit/test_data.py -q`
+Run: `uv run pytest tests/unit/test_data.py -q`
 
 Expected after implementation: all tests pass.
 
@@ -125,7 +127,7 @@ def test_client_retries_429_then_returns(httpx_mock, client):
 
 - [ ] **Step 2: Run tests and verify failures**
 
-Run: `python -m pytest tests/unit/test_llm_parsing.py tests/unit/test_cache.py tests/unit/test_llm_client.py -q`
+Run: `uv run pytest tests/unit/test_llm_parsing.py tests/unit/test_cache.py tests/unit/test_llm_client.py -q`
 
 Expected: imports fail.
 
@@ -135,7 +137,7 @@ Use one injected `httpx.Client`, POST `${base_url}/chat/completions` and `${base
 
 - [ ] **Step 4: Run client tests**
 
-Run: `python -m pytest tests/unit/test_llm_parsing.py tests/unit/test_cache.py tests/unit/test_llm_client.py -q`
+Run: `uv run pytest tests/unit/test_llm_parsing.py tests/unit/test_cache.py tests/unit/test_llm_client.py -q`
 
 Expected: all tests pass without network access.
 
@@ -179,7 +181,7 @@ Call `precision_recall_fscore_support(..., labels=["negative","neutral","positiv
 
 - [ ] **Step 3: Run and commit**
 
-Run: `python -m pytest tests/unit/test_metrics.py tests/unit/test_artifacts.py -q`
+Run: `uv run pytest tests/unit/test_metrics.py tests/unit/test_artifacts.py -q`
 
 Expected: all tests pass.
 
@@ -225,7 +227,7 @@ Create SQLite tables `experiences` and `vectors`, enable foreign keys and WAL, a
 
 - [ ] **Step 3: Run and commit**
 
-Run: `python -m pytest tests/unit/test_memory_store.py tests/unit/test_retrieval.py -q`
+Run: `uv run pytest tests/unit/test_memory_store.py tests/unit/test_retrieval.py -q`
 
 Expected: all tests pass using temporary SQLite files.
 
@@ -273,7 +275,7 @@ Each strategy returns messages but never calls the API. Require exactly one fina
 
 Reflection accepts feedback only after prediction and returns `error_type`, `corrected_reason`, `generalized_rule`, and `scope`. Disabled reflection creates only case experience; enabled reflection adds a generalized rule when structured parsing succeeds and records a recoverable error otherwise.
 
-Run: `python -m pytest tests/unit/test_prompts.py tests/unit/test_strategy_selector.py tests/unit/test_reflector.py -q`
+Run: `uv run pytest tests/unit/test_prompts.py tests/unit/test_strategy_selector.py tests/unit/test_reflector.py -q`
 
 Expected: all tests pass.
 
@@ -315,7 +317,7 @@ def test_learn_rejects_mismatched_feedback(agent, prediction_input, prediction):
 
 - [ ] **Step 3: Run and commit**
 
-Run: `python -m pytest tests/unit/test_agent.py tests/unit/test_leakage.py -q`
+Run: `uv run pytest tests/unit/test_agent.py tests/unit/test_leakage.py -q`
 
 Expected: all tests pass.
 
@@ -360,7 +362,7 @@ Use the same dataset loader, model configuration, parser, retry policy, and eval
 
 - [ ] **Step 3: Run and commit**
 
-Run: `python -m pytest tests/unit/test_experiment_runner.py tests/unit/test_ablation_configs.py -q`
+Run: `uv run pytest tests/unit/test_experiment_runner.py tests/unit/test_ablation_configs.py -q`
 
 Expected: all tests pass with fake clients.
 
@@ -379,7 +381,7 @@ git commit -m "feat: add reproducible research experiment runners"
 - Modify: `README.md`
 
 **Interfaces:**
-- Produces: `python -m sentiment_agent.cli run --config PATH`
+- Produces: `uv run python -m sentiment_agent.cli run --config PATH`
 - Produces: a complete offline workflow that exercises load, predict, evaluate, feedback, reflection, memory update, checkpoint evaluation, resume, and artifact generation.
 
 - [ ] **Step 1: Write the failing full-flow test**
@@ -404,23 +406,23 @@ The fake API returns deterministic classification, embedding, translation, and r
 
 - [ ] **Step 3: Run the complete integration test**
 
-Run: `python -m pytest tests/integration/test_full_workflow.py -v`
+Run: `uv run pytest tests/integration/test_full_workflow.py -v`
 
 Expected: one complete workflow passes with no external network requests.
 
 - [ ] **Step 4: Run all tests and coverage**
 
-Run: `python -m pytest --cov=sentiment_agent --cov-report=term-missing --cov-fail-under=85`
+Run: `uv run pytest --cov=sentiment_agent --cov-report=term-missing --cov-fail-under=85`
 
 Expected: all unit and integration tests pass and total statement coverage is at least 85%.
 
 - [ ] **Step 5: Verify the CLI help and configuration validation**
 
-Run: `python -m sentiment_agent.cli --help`
+Run: `uv run python -m sentiment_agent.cli --help`
 
 Expected: commands `run`, `validate-config`, and `summarize` are listed.
 
-Run: `python -m sentiment_agent.cli validate-config --config configs/experiments/evolution.yaml`
+Run: `uv run python -m sentiment_agent.cli validate-config --config configs/experiments/evolution.yaml`
 
 Expected: exit code 0 and the configuration hash is printed without revealing an API key.
 
@@ -452,7 +454,7 @@ Expected: all deterministic artifacts match; timestamps and output paths may dif
 
 - [ ] **Step 3: Run final verification suite**
 
-Run: `python -m pytest -q --cov=sentiment_agent --cov-report=term-missing --cov-fail-under=85`.
+Run: `uv run pytest -q --cov=sentiment_agent --cov-report=term-missing --cov-fail-under=85`.
 
 Expected: zero failures and coverage at least 85%.
 

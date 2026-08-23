@@ -1,137 +1,75 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from dataclasses import dataclass
+from pathlib import Path
 
-from pydantic import Field
-
-from sentiment_agent.data.loader import prediction_input
-from sentiment_agent.data.stream import EvaluationStream, TrainingStream
-from sentiment_agent.evaluation.artifacts import ArtifactWriter
-from sentiment_agent.evaluation.evaluator import CostTracker, Evaluator
-from sentiment_agent.evaluation.metrics import MetricsReport
-from sentiment_agent.schemas import Prediction, PredictionInput, SentimentExample, StrictModel
+from sentiment_agent.agent.sentiment_agent import SentimentAgent
+from sentiment_agent.evaluation.metrics import classification_metrics
+from sentiment_agent.experiments.artifacts import ArtifactWriter
+from sentiment_agent.schemas import Feedback, SentimentExample
 
 
-class ExperimentAgent(Protocol):
-    store: object
+def partition_batches(items: Sequence, batch_size: int, checkpoints: Sequence[int]) -> list[list]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    boundaries = {value for value in checkpoints if 0 < value <= len(items)} | {len(items)}
+    batches = []
+    start = 0
+    while start < len(items):
+        next_checkpoint = min(value for value in boundaries if value > start)
+        end = min(start + batch_size, next_checkpoint)
+        batches.append(list(items[start:end]))
+        start = end
+    return batches
 
-    def predict(self, item: PredictionInput) -> Prediction: ...
 
-    def learn(self, item, prediction, feedback): ...
-
-
-class EvolutionStage(StrictModel):
-    processed_training_samples: int = Field(ge=0)
-    experience_count: int = Field(ge=0)
-    metrics: MetricsReport
-
-
-class ExperimentSummary(StrictModel):
-    experiment_type: str
-    processed_training_samples: int = Field(ge=0)
-    evaluation_samples: int = Field(ge=0)
-    stages: list[EvolutionStage]
-    costs: dict[str, float | int]
+@dataclass(frozen=True)
+class RunSummary:
+    run_dir: Path
+    completed_samples: int
+    checkpoints: tuple[int, ...]
+    metrics: dict
 
 
 class ExperimentRunner:
-    def __init__(
-        self,
-        agent: ExperimentAgent,
-        writer: ArtifactWriter,
-        *,
-        input_price_per_million: float = 0.0,
-        output_price_per_million: float = 0.0,
-    ) -> None:
+    def __init__(self, *, agent: SentimentAgent, writer: ArtifactWriter,
+                 batch_size: int, concurrency: int, checkpoints: Sequence[int] = ()) -> None:
         self.agent = agent
         self.writer = writer
-        self.costs = CostTracker(input_price_per_million, output_price_per_million)
+        self.batch_size = batch_size
+        self.concurrency = concurrency
+        self.checkpoints = tuple(sorted(set(checkpoints)))
 
-    def evaluate(
-        self,
-        examples: Sequence[SentimentExample],
-        *,
-        checkpoint: int,
-    ) -> MetricsReport:
-        evaluator = Evaluator()
-        stream = EvaluationStream(examples)
-        for example, item in zip(examples, stream, strict=True):
-            prediction = self.agent.predict(item)
-            evaluator.add(example.label, prediction.label)
-            self.costs.record(prediction.usage, latency_seconds=prediction.latency_seconds)
-            self.writer.append_prediction(
-                {
-                    **prediction.model_dump(mode="json"),
-                    "gold_label": example.label,
-                    "split": example.split,
-                    "checkpoint": checkpoint,
-                }
-            )
-        return evaluator.report()
+    async def evaluate(self, examples: Sequence[SentimentExample], *, split: str,
+                       checkpoint: int | None = None) -> dict:
+        predictions = []
+        for batch in partition_batches(list(examples), self.batch_size, []):
+            predictions.extend(await self.agent.predict_batch(
+                [example.to_prediction_input() for example in batch], max_concurrency=self.concurrency))
+        metrics = classification_metrics([item.label for item in examples], [item.label for item in predictions])
+        self.writer.write_json(f"metrics-{split}-{checkpoint or 'final'}.json", metrics)
+        return metrics
 
-    def run_evolution(
-        self,
-        training_examples: Sequence[SentimentExample],
-        evaluation_examples: Sequence[SentimentExample],
-        *,
-        checkpoints: Sequence[int],
-    ) -> ExperimentSummary:
-        ordered_checkpoints = sorted(set(checkpoints))
-        if not ordered_checkpoints:
-            raise ValueError("at least one checkpoint is required")
-        if ordered_checkpoints[0] < 0 or ordered_checkpoints[-1] > len(training_examples):
-            raise ValueError("checkpoint is outside the training stream")
-
-        stages: list[EvolutionStage] = []
-        if 0 in ordered_checkpoints:
-            stages.append(self._evaluate_stage(evaluation_examples, processed=0))
-
-        training_stream = TrainingStream(training_examples)
-        for processed, (example, item) in enumerate(
-            zip(training_examples, training_stream, strict=True),
-            start=1,
-        ):
-            prediction = self.agent.predict(item)
-            feedback = training_stream.feedback(
-                item,
-                predicted=prediction.label,
-                sample_id=prediction.sample_id,
-            )
-            self.agent.learn(item, prediction, feedback)
-            self.costs.record(prediction.usage, latency_seconds=prediction.latency_seconds)
-            self.writer.append_prediction(
-                {
-                    **prediction.model_dump(mode="json"),
-                    "gold_label": example.label,
-                    "split": "train",
-                    "checkpoint": processed,
-                }
-            )
-            if processed in ordered_checkpoints:
-                stages.append(self._evaluate_stage(evaluation_examples, processed=processed))
-
-        summary = ExperimentSummary(
-            experiment_type="evolution",
-            processed_training_samples=len(training_examples),
-            evaluation_samples=len(evaluation_examples),
-            stages=stages,
-            costs=self.costs.as_dict(),
-        )
-        self.writer.write_json("metrics.json", summary.model_dump(mode="json", exclude={"costs"}))
-        self.writer.write_json("costs.json", self.costs.as_dict())
-        return summary
-
-    def _evaluate_stage(
-        self,
-        evaluation_examples: Sequence[SentimentExample],
-        *,
-        processed: int,
-    ) -> EvolutionStage:
-        report = self.evaluate(evaluation_examples, checkpoint=processed)
-        count_method = getattr(self.agent.store, "count")
-        return EvolutionStage(
-            processed_training_samples=processed,
-            experience_count=int(count_method()),
-            metrics=report,
-        )
+    async def run(self, train: Sequence[SentimentExample], dev: Sequence[SentimentExample],
+                  test: Sequence[SentimentExample]) -> RunSummary:
+        processed = 0
+        reached = []
+        for batch_id, batch in enumerate(partition_batches(list(train), self.batch_size, self.checkpoints), start=1):
+            items = [example.to_prediction_input() for example in batch]
+            predictions = await self.agent.predict_batch(items, max_concurrency=self.concurrency)
+            feedback = [Feedback(sample_id=prediction.sample_id, predicted_label=prediction.label,
+                                 gold_label=example.label, correct=prediction.label == example.label)
+                        for example, prediction in zip(batch, predictions, strict=True)]
+            self.agent.learn_batch(items, predictions, feedback, batch_id=batch_id)
+            processed += len(batch)
+            for example, prediction in zip(batch, predictions, strict=True):
+                self.writer.append_jsonl("predictions.jsonl", {
+                    "split": "train", "batch_id": batch_id, "sample_id": example.id,
+                    "gold_label": example.label, **prediction.model_dump(mode="json")})
+            if processed in self.checkpoints:
+                reached.append(processed)
+                await self.evaluate(dev, split="dev", checkpoint=processed)
+        metrics = await self.evaluate(test, split="test")
+        self.writer.write_json("metrics.json", metrics)
+        return RunSummary(self.writer.run_dir, processed, tuple(reached), metrics)

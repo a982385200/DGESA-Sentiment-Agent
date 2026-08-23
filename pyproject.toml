@@ -18,6 +18,9 @@ dependencies = [
   "typer>=0.12,<1",
 ]
 
+[project.scripts]
+sentiment-agent = "sentiment_agent.cli:app"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3,<9",
@@ -31,6 +34,7 @@ packages = ["src/sentiment_agent"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["sentiment_agent"]

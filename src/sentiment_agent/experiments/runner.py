@@ -118,7 +118,7 @@ class ExperimentRunner:
             stages=stages,
             costs=self.costs.as_dict(),
         )
-        self.writer.write_json("metrics.json", summary)
+        self.writer.write_json("metrics.json", summary.model_dump(mode="json", exclude={"costs"}))
         self.writer.write_json("costs.json", self.costs.as_dict())
         return summary
 

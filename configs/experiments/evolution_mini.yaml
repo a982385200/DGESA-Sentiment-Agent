@@ -1,0 +1,37 @@
+model:
+  name: qwen-plus
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key_env: OPENAI_API_KEY
+  temperature: 0.0
+  max_tokens: 256
+  timeout_seconds: 60
+  max_retries: 3
+  concurrency: 4
+
+embedding:
+  model_id: models/embeddings/bge-m3
+  device: cpu
+  batch_size: 32
+
+retrieval:
+  enabled: true
+  k: 5
+  minimum_reliability: 0.0
+  semantic_weight: 1.0
+  language_weight: 0.1
+  source_weight: 0.05
+  reliability_weight: 0.1
+  cross_lingual: true
+
+experiment:
+  train_paths:
+    - datasets/mini_dataset/vietnamese/train.json
+  dev_paths:
+    - datasets/mini_dataset/vietnamese/dev.json
+  test_paths:
+    - datasets/mini_dataset/vietnamese/test.json
+  output_root: outputs
+  train_batch_size: 8
+  checkpoints: [50, 100]
+  seed: 42
+  use_cache: true

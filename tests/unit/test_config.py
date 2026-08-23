@@ -70,3 +70,14 @@ def test_shipped_configs_use_local_embedding_path() -> None:
         Path("configs/experiments/evolution.yaml"),
     ):
         assert load_config(path).embedding.model_id == "models/embeddings/bge-m3"
+
+
+def test_mini_evolution_config_uses_mini_data_and_learning() -> None:
+    config = load_config(Path("configs/experiments/evolution_mini.yaml"))
+    assert config.retrieval.enabled is True
+    assert config.retrieval.k == 5
+    assert config.experiment.train_batch_size == 8
+    assert config.experiment.checkpoints == [50, 100]
+    assert config.experiment.train_paths == [Path("datasets/mini_dataset/vietnamese/train.json")]
+    assert config.experiment.dev_paths == [Path("datasets/mini_dataset/vietnamese/dev.json")]
+    assert config.experiment.test_paths == [Path("datasets/mini_dataset/vietnamese/test.json")]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 import numpy as np
 

@@ -4,46 +4,33 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
-from threading import Lock
-from typing import Any
 
 
-def build_cache_key(payload: dict[str, Any]) -> str:
-    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-class SQLiteResponseCache:
+class ResponseCache:
     def __init__(self, path: Path) -> None:
-        self.path = path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = Lock()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS responses (
-                    cache_key TEXT PRIMARY KEY,
-                    response_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.connection = sqlite3.connect(path)
+        self.connection.execute("CREATE TABLE IF NOT EXISTS responses(key TEXT PRIMARY KEY,response TEXT NOT NULL)")
+        self.connection.commit()
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.path)
+    def key(self, model: str, parameters: dict, messages: list[str]) -> str:
+        raw = json.dumps({"model": model, "parameters": parameters, "messages": messages},
+                         ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-    def get(self, cache_key: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as connection:
-            row = connection.execute(
-                "SELECT response_json FROM responses WHERE cache_key = ?",
-                (cache_key,),
-            ).fetchone()
-        return None if row is None else json.loads(row[0])
+    def get(self, key: str) -> str | None:
+        row = self.connection.execute("SELECT response FROM responses WHERE key=?", (key,)).fetchone()
+        return None if row is None else str(row[0])
 
-    def put(self, cache_key: str, response: dict[str, Any]) -> None:
-        serialized = json.dumps(response, ensure_ascii=False, sort_keys=True)
-        with self._lock, self._connect() as connection:
-            connection.execute(
-                "INSERT OR REPLACE INTO responses(cache_key, response_json) VALUES (?, ?)",
-                (cache_key, serialized),
-            )
+    def put(self, key: str, response: str) -> None:
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO responses(key,response) VALUES(?,?)", (key, response))
+
+    def close(self) -> None:
+        self.connection.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()

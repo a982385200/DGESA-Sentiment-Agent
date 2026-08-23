@@ -3,7 +3,7 @@ model:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   api_key_env: OPENAI_API_KEY
   temperature: 0.0
-  max_tokens: 256
+  max_tokens: 1024
   timeout_seconds: 60
   max_retries: 3
   concurrency: 4
@@ -22,6 +22,19 @@ retrieval:
   source_weight: 0.05
   reliability_weight: 0.1
   cross_lingual: true
+
+attribution:
+  enabled: true
+  llm_for_errors_only: true
+  max_retries: 2
+
+generalization:
+  enabled: true
+  merge_similarity: 0.85
+  minimum_support: 2
+  minimum_batches: 2
+  maximum_contradiction_ratio: 0.20
+  minimum_active_reliability: 0.60
 
 experiment:
   train_paths:

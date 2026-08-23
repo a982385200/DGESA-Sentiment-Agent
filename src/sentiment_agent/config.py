@@ -38,6 +38,21 @@ class RetrievalConfig(StrictModel):
     cross_lingual: bool = True
 
 
+class AttributionConfig(StrictModel):
+    enabled: bool = True
+    llm_for_errors_only: bool = True
+    max_retries: int = Field(default=2, ge=0)
+
+
+class GeneralizationConfig(StrictModel):
+    enabled: bool = True
+    merge_similarity: float = Field(default=0.85, ge=0.0, le=1.0)
+    minimum_support: int = Field(default=2, ge=1)
+    minimum_batches: int = Field(default=2, ge=1)
+    maximum_contradiction_ratio: float = Field(default=0.20, ge=0.0, le=1.0)
+    minimum_active_reliability: float = Field(default=0.60, ge=0.0, le=1.0)
+
+
 class RunConfig(StrictModel):
     train_paths: list[Path]
     dev_paths: list[Path]
@@ -53,6 +68,8 @@ class ExperimentConfig(StrictModel):
     model: ModelConfig
     embedding: EmbeddingConfig
     retrieval: RetrievalConfig = RetrievalConfig()
+    attribution: AttributionConfig = AttributionConfig()
+    generalization: GeneralizationConfig = GeneralizationConfig()
     experiment: RunConfig
 
 

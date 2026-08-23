@@ -81,3 +81,9 @@ def test_mini_evolution_config_uses_mini_data_and_learning() -> None:
     assert config.experiment.train_paths == [Path("datasets/mini_dataset/vietnamese/train.json")]
     assert config.experiment.dev_paths == [Path("datasets/mini_dataset/vietnamese/dev.json")]
     assert config.experiment.test_paths == [Path("datasets/mini_dataset/vietnamese/test.json")]
+    assert config.attribution.enabled is True
+    assert config.attribution.max_retries == 2
+    assert config.generalization.enabled is True
+    assert config.generalization.minimum_support == 2
+    assert config.generalization.minimum_batches == 2
+    assert config.generalization.merge_similarity == pytest.approx(0.85)

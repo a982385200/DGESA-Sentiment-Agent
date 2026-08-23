@@ -12,14 +12,12 @@ embedding:
   device: cpu
   batch_size: 32
 retrieval:
-  enabled: true
-  k: 5
-  cross_lingual: true
+  enabled: false
 experiment:
-  train_paths: [datasets/asean_sentiment/vietnamese/train.json]
-  dev_paths: [datasets/asean_sentiment/vietnamese/dev.json]
+  train_paths: []
+  dev_paths: []
   test_paths: [datasets/asean_sentiment/vietnamese/test.json]
   output_root: outputs
   train_batch_size: 8
-  checkpoints: [100, 500, 1000]
+  checkpoints: []
   seed: 42

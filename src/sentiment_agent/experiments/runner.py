@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sentiment_agent.agent.sentiment_agent import SentimentAgent
@@ -34,12 +35,22 @@ class RunSummary:
 
 class ExperimentRunner:
     def __init__(self, *, agent: SentimentAgent, writer: ArtifactWriter,
-                 batch_size: int, concurrency: int, checkpoints: Sequence[int] = ()) -> None:
+                 batch_size: int, concurrency: int, checkpoints: Sequence[int] = (),
+                 manifest_metadata: dict | None = None) -> None:
         self.agent = agent
         self.writer = writer
         self.batch_size = batch_size
         self.concurrency = concurrency
         self.checkpoints = tuple(sorted(set(checkpoints)))
+        self.manifest_metadata = dict(manifest_metadata or {})
+        self._calls = 0
+        self._input_tokens = 0
+        self._output_tokens = 0
+
+    def _record_usage(self, predictions) -> None:
+        self._calls += len(predictions)
+        self._input_tokens += sum(item.usage.input_tokens for item in predictions)
+        self._output_tokens += sum(item.usage.output_tokens for item in predictions)
 
     async def evaluate(self, examples: Sequence[SentimentExample], *, split: str,
                        checkpoint: int | None = None) -> dict:
@@ -47,17 +58,22 @@ class ExperimentRunner:
         for batch in partition_batches(list(examples), self.batch_size, []):
             predictions.extend(await self.agent.predict_batch(
                 [example.to_prediction_input() for example in batch], max_concurrency=self.concurrency))
+        self._record_usage(predictions)
         metrics = classification_metrics([item.label for item in examples], [item.label for item in predictions])
         self.writer.write_json(f"metrics-{split}-{checkpoint or 'final'}.json", metrics)
         return metrics
 
     async def run(self, train: Sequence[SentimentExample], dev: Sequence[SentimentExample],
                   test: Sequence[SentimentExample]) -> RunSummary:
+        started_at = datetime.now(UTC).isoformat()
+        self.writer.write_json("manifest.json", {
+            **self.manifest_metadata, "status": "running", "started_at": started_at})
         processed = 0
         reached = []
         for batch_id, batch in enumerate(partition_batches(list(train), self.batch_size, self.checkpoints), start=1):
             items = [example.to_prediction_input() for example in batch]
             predictions = await self.agent.predict_batch(items, max_concurrency=self.concurrency)
+            self._record_usage(predictions)
             feedback = [Feedback(sample_id=prediction.sample_id, predicted_label=prediction.label,
                                  gold_label=example.label, correct=prediction.label == example.label)
                         for example, prediction in zip(batch, predictions, strict=True)]
@@ -72,4 +88,14 @@ class ExperimentRunner:
                 await self.evaluate(dev, split="dev", checkpoint=processed)
         metrics = await self.evaluate(test, split="test")
         self.writer.write_json("metrics.json", metrics)
+        self.writer.write_json("costs.json", {
+            "calls": self._calls, "input_tokens": self._input_tokens,
+            "output_tokens": self._output_tokens,
+        })
+        self.writer.write_json("manifest.json", {
+            **self.manifest_metadata,
+            "status": "completed", "started_at": started_at,
+            "completed_at": datetime.now(UTC).isoformat(),
+            "completed_samples": processed, "checkpoints": reached,
+        })
         return RunSummary(self.writer.run_dir, processed, tuple(reached), metrics)

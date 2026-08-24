@@ -37,9 +37,7 @@ datasets/mini_dataset/vietnamese/*
 
 # Internal research notes and legacy benchmark utilities
 ASEAN_Self_Evolving_Sentiment_Agent_Paper_Design.md
-docs/*.pdf
-docs/benchmark_literature_results.md
-docs/superpowers/
+docs/
 scripts/
 src/sentiment_agent/benchmarks/
 tests/unit/test_zero_shot_benchmark.py
